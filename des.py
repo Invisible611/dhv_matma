@@ -1,42 +1,36 @@
 # ==========================================
 # DES Encryption/Decryption App với Gradio
-# Chạy trên Google Colab
+# FIX FULL hỗ trợ tiếng Việt
 # ==========================================
 
 # Cài thư viện
-#!pip install pycryptodome gradio -q
+!pip install pycryptodome gradio -q
 
 # ==========================================
 # IMPORT
 # ==========================================
 from Crypto.Cipher import DES
 from Crypto.Util.Padding import pad, unpad
-from Crypto.Random import get_random_bytes
+from Crypto.Hash import MD5
 import base64
 import gradio as gr
 import os
 
 # ==========================================
-# HÀM XỬ LÝ KHÓA DES
-# DES dùng khóa 8 bytes
+# HÀM XỬ LÝ KHÓA DES (FIX QUAN TRỌNG)
+# Dùng MD5 để tránh lỗi Unicode
 # ==========================================
 def format_key(key_text):
-    key = key_text.encode("utf-8")
-
-    # DES yêu cầu đúng 8 bytes
-    if len(key) < 8:
-        key = key.ljust(8, b'0')
-    else:
-        key = key[:8]
-
-    return key
-
+    return MD5.new(key_text.encode("utf-8")).digest()[:8]
 
 # ==========================================
 # MÃ HÓA TEXT
 # ==========================================
 def encrypt_text(plain_text, key_text):
     try:
+        if not plain_text:
+            return "Vui lòng nhập văn bản"
+
         key = format_key(key_text)
 
         cipher = DES.new(key, DES.MODE_CBC)
@@ -45,7 +39,6 @@ def encrypt_text(plain_text, key_text):
 
         encrypted_bytes = cipher.encrypt(padded_text)
 
-        # Ghép IV + ciphertext
         result = base64.b64encode(cipher.iv + encrypted_bytes).decode("utf-8")
 
         return result
@@ -55,13 +48,19 @@ def encrypt_text(plain_text, key_text):
 
 
 # ==========================================
-# GIẢI MÃ TEXT
+# GIẢI MÃ TEXT (FIX UTF-8 + LỖI KEY)
 # ==========================================
 def decrypt_text(cipher_text, key_text):
     try:
+        if not cipher_text:
+            return "Vui lòng nhập dữ liệu mã hóa"
+
         key = format_key(key_text)
 
         data = base64.b64decode(cipher_text)
+
+        if len(data) < 8:
+            return "Lỗi: dữ liệu không hợp lệ"
 
         iv = data[:8]
         encrypted_data = data[8:]
@@ -75,6 +74,8 @@ def decrypt_text(cipher_text, key_text):
 
         return decrypted.decode("utf-8")
 
+    except ValueError:
+        return "Lỗi: Sai key hoặc dữ liệu bị hỏng"
     except Exception as e:
         return f"Lỗi: {str(e)}"
 
@@ -85,7 +86,7 @@ def decrypt_text(cipher_text, key_text):
 def encrypt_file(file_obj, key_text):
     try:
         if file_obj is None:
-            return "Chưa chọn file"
+            return None
 
         key = format_key(key_text)
 
@@ -117,7 +118,7 @@ def encrypt_file(file_obj, key_text):
 def decrypt_file(file_obj, key_text):
     try:
         if file_obj is None:
-            return "Chưa chọn file"
+            return None
 
         key = format_key(key_text)
 
@@ -125,6 +126,9 @@ def decrypt_file(file_obj, key_text):
 
         with open(input_path, "rb") as f:
             file_data = f.read()
+
+        if len(file_data) < 8:
+            return "File không hợp lệ"
 
         iv = file_data[:8]
         encrypted_data = file_data[8:]
@@ -143,6 +147,8 @@ def decrypt_file(file_obj, key_text):
 
         return output_path
 
+    except ValueError:
+        return "Sai key hoặc file bị lỗi"
     except Exception as e:
         return f"Lỗi: {str(e)}"
 
@@ -152,22 +158,20 @@ def decrypt_file(file_obj, key_text):
 # ==========================================
 with gr.Blocks(title="DES Encryption App") as demo:
 
-    gr.Markdown("# 🔐 DES Encryption & Decryption")
+    gr.Markdown("# 🔐 DES Encryption & Decryption (Unicode OK)")
 
     # =========================
     # TAB TEXT
     # =========================
     with gr.Tab("Text Encryption"):
 
-        gr.Markdown("## Mã hóa / Giải mã Text")
-
         txt_input = gr.Textbox(
-            label="Nhập văn bản",
+            label="Nhập văn bản (hỗ trợ tiếng Việt)",
             lines=5
         )
 
         txt_key = gr.Textbox(
-            label="Khóa DES (8 ký tự)",
+            label="Khóa",
             type="password"
         )
 
@@ -197,14 +201,12 @@ with gr.Blocks(title="DES Encryption App") as demo:
     # =========================
     with gr.Tab("File Encryption"):
 
-        gr.Markdown("## Mã hóa / Giải mã File")
-
         file_input = gr.File(
             label="Chọn file"
         )
 
         file_key = gr.Textbox(
-            label="Khóa DES (8 ký tự)",
+            label="Khóa",
             type="password"
         )
 
